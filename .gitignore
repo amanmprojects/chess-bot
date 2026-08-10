@@ -1,0 +1,17 @@
+# Training data, checkpoints, and logs. data/ is ~670MB: fixed-width record
+# binaries, precomputed legal-move masks, and 67MB checkpoints. Regenerate with
+# prepare.py + precompute_masks.py rather than committing any of it.
+data/
+data_dev/
+*.pt
+*.pt.final
+*.bin
+*.log
+*.out
+
+__pycache__/
+*.pyc
+.venv/
+
+node_modules/
+.vercel/
