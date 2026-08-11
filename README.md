@@ -52,32 +52,6 @@ masked to -inf at train and play time.
     python prepare.py --input ~/code/llm/data/dev.pgn.zst --out-dir data_dev
     python train.py --data-dir data_dev --epochs 1 --eval-every 60 --d 128 --n-layers 4
 
-## Play it in the browser
-
-The `chess/` submodule is a zero-dependency static chess game whose built-in AI
-is alpha-beta search in a Web Worker. The net cannot run there -- it needs CUDA
-and a 67MB checkpoint -- so it runs in a Python process and the game calls it
-over HTTP.
-
-    git submodule update --init          # once
-    python serve_model.py                # terminal 1, port 8001
-    cd chess && node server.mjs          # terminal 2, serves the page
-
-Then pick **Neural net (server)** in the level dropdown. Every move logs which
-engine produced it; the net reports 1 node because it looks at exactly one
-position, while any alpha-beta level reports thousands.
-
-## The model on HuggingFace
-
-`data/` is gitignored, so a fresh clone has no weights. The shipped checkpoint
-is published at
-[amanm10000/chess-policy-net](https://huggingface.co/amanm10000/chess-policy-net)
-and `serve_model.py` falls back to it automatically when the local file is
-missing -- a clone plus `pip install huggingface_hub` is enough to play.
-
-Re-publish after a new run with `python push_to_hf.py` (`--dry-run` first).
-The token is read from `HF_TOKEN`, or from `~/code/llm/.env`.
-
 ## Filters (prepare.py)
 
 Both players >= 1800 Elo, base time >= 180s (no bullet), Termination == Normal,

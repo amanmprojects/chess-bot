@@ -7,10 +7,6 @@ that worker. It runs here instead and the game calls it over HTTP.
 
     python serve_model.py [--port 8001] [--ckpt data/ckpt.pt]
 
-If the checkpoint is not on disk it is pulled from HuggingFace
-(amanm10000/chess-policy-net) and cached, so a fresh clone works without the
-gitignored data/ directory.
-
     POST /move   {"fen": "...", "temperature": 0.0}
               -> {"uci": "e2e4", "value": 0.12, "cp": 118, "ms": 7}
     GET  /health -> {"ok": true, "step": 40000, "device": "cuda"}
@@ -23,7 +19,6 @@ milliseconds each, so a thread pool would only add contention.
 import argparse
 import json
 import math
-import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -34,8 +29,6 @@ from model import ChessNet
 from play import pick_move
 
 MAX_BODY = 8192          # a FEN is ~90 bytes; anything larger is not a real request
-HF_REPO = "amanm10000/chess-policy-net"
-HF_FILE = "ckpt.pt"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -129,39 +122,6 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-def fetch_from_hub(repo=HF_REPO, filename=HF_FILE):
-    """Download the published checkpoint, returning a local path.
-
-    `data/` is gitignored, so a fresh clone has no weights. Rather than fail,
-    fall back to the copy on the Hub -- the same bytes that were uploaded from
-    `data/ckpt.pt`. Cached under HF_HOME after the first call.
-
-    huggingface_hub is an optional dependency: it is only needed when the local
-    checkpoint is absent, so the import lives here rather than at module scope.
-    """
-    try:
-        from huggingface_hub import hf_hub_download
-    except ImportError:
-        raise SystemExit(
-            "no local checkpoint, and huggingface_hub is not installed to fetch "
-            f"one.\n  pip install huggingface_hub   # then retry, pulls {repo}"
-        )
-    print(f"[serve] no local checkpoint; fetching {filename} from {repo}",
-          flush=True)
-    # Xet is HF's newer transfer backend and fails on some networks with a bare
-    # ConnectionError. Plain LFS is slower but reliable, and 67MB is a one-time
-    # download. setdefault so an explicit env var still wins.
-    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
-    return hf_hub_download(repo_id=repo, filename=filename)
-
-
-def resolve_ckpt(path):
-    """The local checkpoint if present, otherwise the published one."""
-    if os.path.exists(path):
-        return path
-    return fetch_from_hub()
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", default="data/ckpt.pt")
@@ -175,8 +135,7 @@ def main():
 
     device = torch.device(args.device or
                           ("cuda" if torch.cuda.is_available() else "cpu"))
-    ckpt_path = resolve_ckpt(args.ckpt)
-    ck = torch.load(ckpt_path, map_location=device, weights_only=False)
+    ck = torch.load(args.ckpt, map_location=device, weights_only=False)
     net = ChessNet(d=args.d, n_layers=args.n_layers, n_heads=8).to(device)
     net.load_state_dict(ck["model"])
     net.eval()
@@ -189,7 +148,7 @@ def main():
     # would otherwise land on the player's first move as a visible stall.
     pick_move(net, chess.Board(), device, 0.0)
 
-    print(f"model {ckpt_path} (step {Handler.ckpt_step}) on {device}")
+    print(f"model {args.ckpt} (step {Handler.ckpt_step}) on {device}")
     print(f"serving http://{args.host}:{args.port}  (POST /move, GET /health)")
     ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
 
