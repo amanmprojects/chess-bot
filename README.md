@@ -52,6 +52,39 @@ masked to -inf at train and play time.
     python prepare.py --input ~/code/llm/data/dev.pgn.zst --out-dir data_dev
     python train.py --data-dir data_dev --epochs 1 --eval-every 60 --d 128 --n-layers 4
 
+## Play it in the browser
+
+The `chess/` submodule is a zero-dependency static chess game whose built-in AI
+is alpha-beta search in a Web Worker. The net ships with the page as a single
+ONNX file and runs inside that worker via onnxruntime-web — no Python, no
+server, no CUDA. That is also exactly how the deployed Space works:
+
+- **Live demo**: [huggingface.co/spaces/amanm10000/chess-bot](https://huggingface.co/spaces/amanm10000/chess-bot) (static Space, free)
+- **Locally**: `cd chess && npm run nn:setup && node server.mjs` — then pick
+  **Neural net** in the level dropdown. Every move logs which engine produced
+  it; the net reports 1 node because it looks at exactly one position.
+
+`npm run nn:setup` fetches the model (from the HF model repo) and the
+onnxruntime-web runtime into gitignored `chess/onnx/`. The feature encoding,
+move-slot mapping and value→cp conversion are ported 1:1 to JS
+(`chess/src/neural.js`) and pinned by `chess/test/nn.test.mjs` against
+python-chess fixtures (regenerate: `hf/make_nn_fixture.py`). The ONNX export
+is verified against the PyTorch model (`hf/export_onnx.py`).
+
+`serve_model.py` still exists for headless/API play, but the browser game no
+longer needs it.
+
+## The model on HuggingFace
+
+`data/` is gitignored, so a fresh clone has no weights. The shipped checkpoint
+is published at
+[amanm10000/chess-policy-net](https://huggingface.co/amanm10000/chess-policy-net)
+and `serve_model.py` falls back to it automatically when the local file is
+missing -- a clone plus `pip install huggingface_hub` is enough to play.
+
+Re-publish after a new run with `python push_to_hf.py` (`--dry-run` first).
+The token is read from `HF_TOKEN`, or from `~/code/llm/.env`.
+
 ## Filters (prepare.py)
 
 Both players >= 1800 Elo, base time >= 180s (no bullet), Termination == Normal,

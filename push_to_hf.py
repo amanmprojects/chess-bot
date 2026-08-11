@@ -29,6 +29,9 @@ UPLOADS = [
     (ROOT / "model.py", "model.py"),
     (ROOT / "features.py", "features.py"),
     (ROOT / "hf/README.md", "README.md"),
+    # ONNX export for in-browser play (static Spaces have no Python).
+    # Regenerate with: ~/code/llm/.venv/bin/python hf/export_onnx.py
+    (ROOT / "hf/onnx/model.onnx", "model.onnx"),
 ]
 
 

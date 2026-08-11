@@ -54,9 +54,23 @@ no-lookahead model looks like when the opponent starts setting two-move traps.
 | `ckpt.pt` | the checkpoint (67MB) — weights, AdamW state, step, best_acc |
 | `model.py` | `ChessNet` definition |
 | `features.py` | board encoding and the 64×73 move-slot mapping |
+| `model.onnx` | the same weights exported to ONNX for in-browser play |
 
 `ckpt.pt` keeps the optimizer moments so training can be resumed from it, which
-is why it is 67MB rather than the ~22MB the weights alone need.
+is why it is 67MB rather than the ~22MB the weights alone need. `model.onnx`
+is regenerated from `ckpt.pt` by `hf/export_onnx.py` in the source repo and is
+verified to produce identical moves (max |Δlogits| < 1e-4).
+
+## Play it in the browser
+
+The chess UI is a static HuggingFace Space — no Python involved. `model.onnx`
+runs inside a Web Worker via onnxruntime-web (WebAssembly):
+
+**[huggingface.co/spaces/amanm10000/chess-bot](https://huggingface.co/spaces/amanm10000/chess-bot)**
+
+Pick **Neural net** in the level dropdown. The feature encoding and move-slot
+mapping are ported to JS in the Space's `src/neural.js`, pinned by tests
+against python-chess fixtures.
 
 ## Usage
 
