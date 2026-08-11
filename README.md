@@ -67,6 +67,17 @@ Then pick **Neural net (server)** in the level dropdown. Every move logs which
 engine produced it; the net reports 1 node because it looks at exactly one
 position, while any alpha-beta level reports thousands.
 
+## The model on HuggingFace
+
+`data/` is gitignored, so a fresh clone has no weights. The shipped checkpoint
+is published at
+[amanm10000/chess-policy-net](https://huggingface.co/amanm10000/chess-policy-net)
+and `serve_model.py` falls back to it automatically when the local file is
+missing -- a clone plus `pip install huggingface_hub` is enough to play.
+
+Re-publish after a new run with `python push_to_hf.py` (`--dry-run` first).
+The token is read from `HF_TOKEN`, or from `~/code/llm/.env`.
+
 ## Filters (prepare.py)
 
 Both players >= 1800 Elo, base time >= 180s (no bullet), Termination == Normal,
