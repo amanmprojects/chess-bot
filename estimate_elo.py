@@ -113,14 +113,24 @@ def main():
     ap.add_argument("--opening-plies", type=int, default=4)
     ap.add_argument("--max-plies", type=int, default=200)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--d", type=int, default=0,
+                    help="model width; 0 reads it from the checkpoint")
+    ap.add_argument("--n-layers", type=int, default=0,
+                    help="model depth; 0 reads it from the checkpoint")
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ck = torch.load(args.ckpt, map_location=device, weights_only=False)
-    net = ChessNet(d=256, n_layers=7, n_heads=8).to(device)
+    # Checkpoints written before this flag existed carry no arch metadata, so
+    # fall back to the historical defaults rather than guessing.
+    d = args.d or int(ck.get("d", 256))
+    n_layers = args.n_layers or int(ck.get("n_layers", 7))
+    n_heads = int(ck.get("n_heads", 8))
+    net = ChessNet(d=d, n_layers=n_layers, n_heads=n_heads).to(device)
     net.load_state_dict(ck["model"])
     net.eval()
-    print(f"model {args.ckpt} (step {ck.get('step')})  device {device}")
+    print(f"model {args.ckpt} (step {ck.get('step')})  device {device}  "
+          f"d={d} n_layers={n_layers} n_heads={n_heads}")
     print(f"{args.games} games/opponent, {args.movetime*1000:.0f}ms/move, "
           f"{args.opening_plies} random opening plies, cap {args.max_plies}\n")
 

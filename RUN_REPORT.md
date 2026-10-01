@@ -138,3 +138,111 @@ snapshots already protected this run. Apply it any time:
     python apply_ckpt_guard.py
 
 It refuses to run while a `train.py` process is alive.
+
+---
+
+# Scale-up run — 2026-10-01
+
+## Short version
+
+Shipped model replaced: **top1 43.18% → 51.08%** on the same 98,294-position
+split (+7.90pp = **49σ**, 1σ = 0.16pp), CE 1.9434 → 1.5452. Both axes the
+previous report recommended were taken at once: 4.8× the data and the larger
+d=320 L=8 model.
+
+**Ship `/home/aman/Work/tries/modal-september/data2/ckpt_d320L8_12M.pt`**
+(step 144,000, best top1). The `.pt.final` sibling is 0.09pp behind = 0.5σ, so
+either is defensible; prefer top1 for a move-playing bot.
+
+Also found and fixed a real training bug — `--value-weight 0.5` was ~1000× too
+large (below), which had been silently starving the policy head in
+`train_eval.py`.
+
+## Data
+
+Source `lichess_db_standard_rated_2023-02`, **first 150.0 GB of the stream only**
+(the month's full download measured ~40 MB/s aggregate across parallel fetches,
+which would not fit a working session). Stop-on-size means the prefix is a valid
+PGN prefix, not a truncated archive.
+
+    150,005,088,256 B decompressed -> 65,417,816 games indexed
+    eligible 13,691,948  keep_frac 0.876427460945022  (target 12,000,000)
+    train 12,476,546 / val 98,294     860.9 MB / 6.8 MB
+
+Filter unchanged from the shipped pipeline: `min_tc=180s`, `min_clk=10s`,
+`clk_frac=0.05` (rejects games that burn their increment). On a sampled shard
+that kept 10.4% of games, at 2.01 records per kept game.
+
+Stockfish eval (2000 nodes, side-to-move POV, ±2000 cp clamp), all 12.57M
+positions:
+
+    mean 37.1 cp   std 411.9   clamped 251,382 (2.01%)
+    legal masks: 407.3M slots, avg 32.6 legal moves/position
+
+## Bug: `value_weight` was ~1000× too large
+
+`train_eval.py` computes `pred_cp = CP_SCALE * tanh(raw)` with `CP_SCALE = 2000`,
+then `loss = ce + value_weight * huber(pred_cp, target_cp)`. The `tanh` scale
+puts a **2000× multiplier on the value gradient** relative to CE. With the
+default `value_weight=0.5` the total gradient is value-dominated, and
+`clip_grad_norm_(1.0)` then scales the whole vector down — the policy head
+receives almost nothing.
+
+Measured at step 2000 (d=320 L=8, batch 512, eval-n 2048):
+
+| value_weight | lr | ce | top1 | agree |
+|---|---|---|---|---|
+| 0.5 (was the default) | 3e-4 | 3.1205 | 0.1621 | 0.6431 |
+| 0.0005 | 3e-4 | 2.7965 | 0.2212 | 0.7324 |
+| 0.0005 | 4e-4 | 2.7607 | 0.2192 | 0.7441 |
+
+At vw=0.5 the run was **flat** — step 10000 gave ce 3.1635 / top1 0.1650, no
+better than step 2000. At 0.0005/4e-4 step 4000 already reached ce 2.4004 /
+top1 0.3164, matching the old run's step-4000 curve. `0.0005` is what this run
+used. lr 3e-4 vs 4e-4 was a tie.
+
+Note `train.py`'s `value_weight` is unaffected — its target is ±1, not ±2000.
+
+## Result
+
+Scored on the **full 98,294-position val split** (1σ on top1 = 0.16pp), with the
+two 2.6M checkpoints copied in so all four are judged on identical data:
+
+| checkpoint | step | CE | top1 |
+|---|---|---|---|
+| shipped best-CE (2.6M, d256 L7) | 24,000 | 1.8829 | 0.4288 |
+| shipped `ckpt.pt` (2.6M, d256 L7) | 40,000 | 1.9434 | 0.4318 |
+| **new `ckpt_d320L8_12M.pt`** | 144,000 | **1.5452** | **0.5108** |
+| new `.pt.final` | 146,208 | 1.5428 | 0.5099 |
+
+**+7.90pp over the shipped model = 49σ.** CE improved by 0.40 nats — the old
+run's finding that "steps 24,000 → 40,000 bought +0.66pp while CE got worse" did
+not recur here: this run's val CE fell monotonically for all 6 epochs.
+
+Training config: d=320, L=8, 9.92M params, batch 512, lr 4e-4,
+value_weight 0.0005, 6 epochs = 146,208 steps, 630 min at ~1,980 samples/s.
+Checkpoint gated on `agree` (sign agreement with Stockfish), tie-broken on top1.
+
+## Caveats
+
+- **`val_mse` is not comparable across these rows.** The new head regresses
+  Stockfish centipawns; the column still scores it against the game result
+  (±1). 0.836 vs 0.761 says the new head disagrees more with who won — expected,
+  because Stockfish eval is not the game outcome. `train_eval.py` never reads
+  `rows["value"]` for the loss.
+- The in-training 8,192-position eval read **0.5040** at step 142,000 where the
+  full split says 0.5108 — the subsample was pessimistic by 0.7pp, within its
+  0.8pp noise. Quote the full-split number.
+- Only **one month's prefix** was used. The 2023-02 remainder is still on the
+  Modal volume (`pgn/2023-02.pgn`, 150 GB, plus all 64 prep shards), so a
+  larger corpus does not require a re-download.
+
+## Not done
+
+- **No Elo or blunder benchmark.** `estimate_elo.py` and `bench_blunders.py`
+  both shell out to Stockfish, which is not installed on this machine and is not
+  in the synced pacman db. `+7.9pp top1` is the headline until an engine is
+  available.
+- The 150 GB PGN and the per-shard `.bin` files were **left on the Modal volume**
+  — within the free storage tier, and they let the prep be re-run with different
+  filters (different `keep_frac`, clk thresholds) without re-downloading.

@@ -32,7 +32,10 @@ def load_val(d):
 
 def score(path, recs, off, slots, n, device, batch=1024):
     ck = torch.load(path, map_location=device, weights_only=False)
-    net = ChessNet(d=256, n_layers=7, n_heads=8).to(device)
+    # Read the arch from the checkpoint so a d=320/L=8 model is comparable to a
+    # d=256/L=7 one; older checkpoints have no metadata and fall back.
+    net = ChessNet(d=int(ck.get("d", 256)), n_layers=int(ck.get("n_layers", 7)),
+                   n_heads=int(ck.get("n_heads", 8))).to(device)
     net.load_state_dict(ck["model"])
     net.eval()
     ce_sum = acc_sum = vm_sum = total = 0

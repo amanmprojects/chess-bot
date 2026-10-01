@@ -183,7 +183,9 @@ def main():
                 if vacc > best_acc:
                     best_acc = vacc
                     torch.save({"model": model.state_dict(), "opt": opt.state_dict(),
-                                "step": step, "best_acc": best_acc}, args.out)
+                                "step": step, "best_acc": best_acc,
+                                "d": args.d, "n_layers": args.n_layers,
+                                "n_heads": args.n_heads}, args.out)
                     print(f"  [ckpt] saved {args.out} (best acc {best_acc:.4f})",
                           flush=True)
 
@@ -197,7 +199,9 @@ def main():
     # Save the final weights BEFORE evaluating: a crash in evaluate() must never
     # discard a completed training run.
     torch.save({"model": model.state_dict(), "opt": opt.state_dict(),
-                "step": step, "best_acc": best_acc}, args.out + ".final")
+                "step": step, "best_acc": best_acc,
+                "d": args.d, "n_layers": args.n_layers,
+                "n_heads": args.n_heads}, args.out + ".final")
     try:
         vce, vacc, vv = evaluate(model, val_mmap, val_slots, val_off, idx,
                                  args.batch_size, device)
@@ -210,7 +214,9 @@ def main():
         if vacc > best_acc + noise:
             best_acc = vacc
             torch.save({"model": model.state_dict(), "opt": opt.state_dict(),
-                        "step": step, "best_acc": best_acc}, args.out)
+                        "step": step, "best_acc": best_acc,
+                        "d": args.d, "n_layers": args.n_layers,
+                        "n_heads": args.n_heads}, args.out)
             print(f"  [ckpt] saved {args.out} (best acc {best_acc:.4f})", flush=True)
     except Exception as exc:
         summary = f"final eval failed ({type(exc).__name__}: {exc}) best {best_acc:.4f}"
