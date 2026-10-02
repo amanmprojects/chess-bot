@@ -1,3 +1,4 @@
 [submodule "chess"]
 	path = chess
 	url = https://github.com/amanmprojects/chess.git
+	branch = neural-policy
